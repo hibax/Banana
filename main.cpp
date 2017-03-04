@@ -1,11 +1,12 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <iterator>
 #include <algorithm>
+#include <numeric>
 
-using namespace std;
 
-int distances[15][15] = { {0} };
+int distances[15][15] = { { 0 } };
 
 enum OWNER
 {
@@ -25,11 +26,11 @@ struct Factory
 	OWNER owner;
 	int cyborgs;
 
-	int cyborgsAfterCalcul;
+	int cyborgsRealValueDuringThisTurn;
 
 	int production;
 
-	Factory(int id, OWNER owner, int cyborgs, int production) : id(id), owner(owner), cyborgs(cyborgs), cyborgsAfterCalcul(cyborgs), production(production)
+	Factory(int id, OWNER owner, int cyborgs, int production) : id(id), owner(owner), cyborgs(cyborgs), cyborgsRealValueDuringThisTurn(cyborgs), production(production)
 	{
 
 	}
@@ -43,10 +44,20 @@ struct Factory
 };
 
 
+
 struct Troop
 {
+	OWNER owner;
+	int from;
+	int to;
+	int cyborgs;
+	int turnsLeft;
+	Troop(OWNER owner, int from, int to, int cyborgs, int turnsLeft) : owner(owner), from(from), to(to), cyborgs(cyborgs), turnsLeft(turnsLeft)
+	{
 
+	}
 };
+
 
 
 static OWNER argToOwner(int arg) {
@@ -78,19 +89,39 @@ public:
 
 };
 
-class IsMyTerritory
-{
-public:
-	IsMyTerritory(bool pair): pair(pair) {}
-	bool operator() (const Factory & factory) const { return factory.owner == NEUTRAL; }
 
-private:
-	bool pair;
-};
-
-Factory calculateFactoryAt(const Factory & factory, int nbTurnsFromNow, const std::vector<Troop> & troops)
+int calculateFactoryCyborgsAt(const Factory & factory, int nbTurnsFromNow, const std::vector<Troop> & troops)
 {
-	return factory;
+	int cyborgAfterCalcul = factory.cyborgsRealValueDuringThisTurn;
+
+	if (factory.owner != OWNER::NEUTRAL) {
+		cyborgAfterCalcul += factory.production*nbTurnsFromNow;
+
+	}
+
+
+	std::vector<Troop> troopsIncoming;
+
+	std::copy_if(troops.begin(), troops.end(), std::back_inserter(troopsIncoming), [&factory](const Troop & troop) { return factory.id == troop.to; });
+
+	for (Troop troop : troopsIncoming) {
+
+		if (troop.turnsLeft <= nbTurnsFromNow) {
+
+			if (troop.owner == factory.owner)
+			{
+				cyborgAfterCalcul += troop.cyborgs;
+			}
+			else
+			{
+				cyborgAfterCalcul -= troop.cyborgs;
+			}
+		}
+	}
+
+
+
+	return cyborgAfterCalcul;
 }
 
 int getDistance(const Factory & factory1, const Factory & factory2)
@@ -109,14 +140,12 @@ int getSumDistance(const Factory & factory, const std::vector<Factory> & factori
 	std::vector<Factory> sourceFactories;
 	std::copy_if(factories.begin(), factories.end(), std::back_inserter(sourceFactories), IsOwnedBy(OWNER::ME));
 
-	return std::accumulate(sourceFactories.begin(), sourceFactories.end(), 0, [&factory] (int sum, const Factory & sourceFactory) { return sum + distances[factory.id][sourceFactory.id]; });
+	return std::accumulate(sourceFactories.begin(), sourceFactories.end(), 0, [&factory](int sum, const Factory & sourceFactory) { return sum + distances[factory.id][sourceFactory.id]; });
 }
 
-vector<Factory> selectTargetFactory(const std::vector<Factory> & factories, bool iAmPair) {
+std::vector<Factory> selectTargetFactory(const std::vector<Factory> & factories) {
 	std::vector<Factory> neutralFactories;
 	std::copy_if(factories.begin(), factories.end(), std::back_inserter(neutralFactories), IsOther());
-	std::vector<Factory> myNeutralFactories;
-	std::copy_if(neutralFactories.begin(), neutralFactories.end(), std::back_inserter(myNeutralFactories), IsMyTerritory(iAmPair));
 
 	if (neutralFactories.size() != 0) {
 
@@ -133,7 +162,7 @@ vector<Factory> selectTargetFactory(const std::vector<Factory> & factories, bool
 
 }
 
-vector<Factory> selectSourceFactory(const std::vector<Factory> & factories) {
+std::vector<Factory> selectSourceFactory(const std::vector<Factory> & factories) {
 	std::vector<Factory> sourceFactories;
 	std::copy_if(factories.begin(), factories.end(), std::back_inserter(sourceFactories), IsOwnedBy(OWNER::ME));
 
@@ -144,9 +173,70 @@ vector<Factory> selectSourceFactory(const std::vector<Factory> & factories) {
 	return sourceFactories;
 }
 
-bool isPair(int factoryId) {
-	return false;
+std::string generateActions(std::vector<Factory> factories, std::vector<Troop> troops)
+{
+
+
+	std::string output = "";
+
+	std::vector<Factory> sourceFactories = selectSourceFactory(factories);
+	std::vector<Factory> targetFactories = selectTargetFactory(factories);
+
+	// To debug: cerr << "Debug messages..." << endl;
+
+	for (Factory target : targetFactories) {
+
+		for (Factory mine : sourceFactories) {
+
+			if (mine.cyborgs > 10 && mine.production < 3)
+			{
+				mine.cyborgsRealValueDuringThisTurn -= 10;
+				output += "INC " + std::to_string(mine.id) + ";";
+			}
+
+			if (target.id != mine.id) {
+
+				int targetCyborgs = calculateFactoryCyborgsAt(target, getDistance(target, mine) + 1, troops);
+
+				std::cerr << "target : " << target.id << std::endl;
+				std::cerr << "troops : " << target.cyborgs << std::endl;
+				std::cerr << "total : " << targetCyborgs << std::endl;
+				std::cerr << "------------------------------------" << std::endl << std::endl;
+
+
+
+				if (targetCyborgs >= 0 && mine.cyborgsRealValueDuringThisTurn > 0) {
+
+
+					int totalSourcesCyborgs = std::accumulate(sourceFactories.begin(), sourceFactories.end(), 0, [](int sum, const Factory & sourceFactory) { return sum + sourceFactory.cyborgsRealValueDuringThisTurn; });
+
+					if (totalSourcesCyborgs > targetCyborgs) {
+
+						if (mine.cyborgs > target.cyborgsRealValueDuringThisTurn) {
+							output += "MOVE " + std::to_string(mine.id) + " " + std::to_string(target.id) + " " + std::to_string(targetCyborgs + 1) + ";";
+							target.cyborgsRealValueDuringThisTurn = -1;
+						}
+						else {
+							output += "MOVE " + std::to_string(mine.id) + " " + std::to_string(target.id) + " " + std::to_string(mine.cyborgs) + ";";
+							target.cyborgsRealValueDuringThisTurn -= mine.cyborgsRealValueDuringThisTurn;
+							mine.cyborgsRealValueDuringThisTurn = 0;
+						}
+
+					}
+
+				}
+
+			}
+		}
+	}
+	if (output == "") {
+		output = "WAIT;";
+	}
+	output += "MSG test";
+
+	return output;
 }
+
 
 /**
 * Auto-generated code below aims at helping you parse
@@ -155,113 +245,54 @@ bool isPair(int factoryId) {
 int main()
 {
 	int factoryCount; // the number of factories
-	cin >> factoryCount;
-	cin.ignore();
+	std::cin >> factoryCount;
+	std::cin.ignore();
 
 	int linkCount; // the number of links between factories
-	cin >> linkCount;
-	cin.ignore();
+	std::cin >> linkCount;
+	std::cin.ignore();
 
 
 	for (int i = 0; i < linkCount; i++) {
 		int factory1;
 		int factory2;
 		int distance;
-		cin >> factory1 >> factory2 >> distance; cin.ignore();
+		std::cin >> factory1 >> factory2 >> distance; std::cin.ignore();
 
 		distances[factory1][factory2] = distance;
-        distances[factory2][factory1] = distance;
+		distances[factory2][factory1] = distance;
 
 	}
 
-	for (int i = 0; i < 15; ++i) {
-		for (int j = 0; j < 15; ++j) {
-			cerr << distances[i][j] << " ";
-		}
-		cerr << endl;
-	}
 
-
-	bool isMyTerritoryFound = false;
-	bool isMyTerritoryPair = false;
 
 
 	// game loop
 	while (1) {
 		std::vector<Factory> factories;
+		std::vector<Troop> troops;
 
 		int entityCount; // the number of entities (e.g. factories and troops)
-		cin >> entityCount; cin.ignore();
+		std::cin >> entityCount; std::cin.ignore();
 		for (int i = 0; i < entityCount; i++) {
 			int entityId;
-			string entityType;
+			std::string entityType;
 			int arg1;
 			int arg2;
 			int arg3;
 			int arg4;
 			int arg5;
-			cin >> entityId >> entityType >> arg1 >> arg2 >> arg3 >> arg4 >> arg5; cin.ignore();
+			std::cin >> entityId >> entityType >> arg1 >> arg2 >> arg3 >> arg4 >> arg5; std::cin.ignore();
 
 			if (entityType == "FACTORY") {
 				factories.push_back(Factory(entityId, argToOwner(arg1), arg2, arg3));
 			}
 			else if (entityType == "TROOP") {
-
+				troops.push_back(Troop(arg1 ? OWNER::ME : OWNER::OPPONENT, arg2, arg3, arg4, arg5));
 			}
 		}
 
-		if (!isMyTerritoryFound) {
-			for (Factory factory : factories) {
-				if (factory.owner == ME) {
-
-					isMyTerritoryPair = isPair(factory.id);
-				}
-			}
-		}
-
-
-		string output = "";
-
-		vector<Factory> sourceFactories = selectSourceFactory(factories);
-		vector<Factory> targetFactories = selectTargetFactory(factories, isMyTerritoryPair);
-
-		// To debug: cerr << "Debug messages..." << endl;
-
-		for (Factory target : targetFactories) {
-
-			for (Factory mine : sourceFactories) {
-
-				if (mine.cyborgs > 10 && mine.production < 3)
-				{
-					mine.cyborgsAfterCalcul -= 10;
-					output += "INC " + to_string(mine.id) + ";";
-				}
-
-				if (target.id != mine.id) {
-
-					if (target.cyborgsAfterCalcul >= 0 && mine.cyborgsAfterCalcul > 0) {
-
-
-						if (mine.cyborgs > target.cyborgsAfterCalcul) {
-							output += "MOVE " + std::to_string(mine.id) + " " + std::to_string(target.id) + " " + std::to_string(target.cyborgsAfterCalcul + 1) + ";";
-							target.cyborgsAfterCalcul = -1;
-						}
-						else {
-							output += "MOVE " + std::to_string(mine.id) + " " + std::to_string(target.id) + " " + std::to_string(mine.cyborgs) + ";";
-							target.cyborgsAfterCalcul -= mine.cyborgsAfterCalcul;
-							mine.cyborgsAfterCalcul = 0;
-						}
-
-					}
-
-				}
-			}
-		}
-		if (output == "") {
-			output = "WAIT;";
-		}
-		output += "MSG test";
-		cout << output << endl;
+		std::cout << generateActions(factories, troops) << std::endl;
 
 	}
 }
