@@ -12,21 +12,32 @@ enum OWNER
 	ME, OPPONENT, NEUTRAL
 };
 
-struct Distance
+struct Troop
 {
-	int id1;
-	int id2;
-	int distance;
+	OWNER owner;
+    int sourceFactory;
+    int targetFactory;
+    int cyborgs;
+    int arrival;
+
+    Troop(OWNER owner, int sourceFactory, int targetFactory, int cyborgs, int arrival) : owner(owner), sourceFactory(sourceFactory), targetFactory(targetFactory), cyborgs(cyborgs), arrival(arrival)
+    {
+
+    }
+
+    Troop() : owner(NEUTRAL), sourceFactory(0), targetFactory(0), cyborgs(0), arrival(0)
+    {
+
+    }
 };
+
 
 struct Factory
 {
 	int id;
 	OWNER owner;
 	int cyborgs;
-
 	int cyborgsAfterCalcul;
-
 	int production;
 
 	Factory(int id, OWNER owner, int cyborgs, int production) : id(id), owner(owner), cyborgs(cyborgs), cyborgsAfterCalcul(cyborgs), production(production)
@@ -39,12 +50,25 @@ struct Factory
 
 	}
 
+	Factory(const Factory & other) : id(other.id), owner(other.owner), cyborgs(other.cyborgs), cyborgsAfterCalcul(other.cyborgs), production(other.production)
+	{
 
-};
+	}
+
+	void fight(const Troop & troop)
+    {
+        if (owner == troop.owner) {
+            cyborgs += troop.cyborgs;
+        } else {
+            cyborgs -= troop.cyborgs;
+            if (cyborgs < 0) {
+                cyborgs = -cyborgs;
+                owner = troop.owner;
+            }
+        }
+    }
 
 
-struct Troop
-{
 
 };
 
@@ -88,9 +112,26 @@ private:
 	bool pair;
 };
 
-Factory calculateFactoryAt(const Factory & factory, int nbTurnsFromNow, const std::vector<Troop> & troops)
+class FightIfArrivedIn 
 {
-	return factory;
+public:
+	FightIfArrivedIn(Factory & factory, int nbTurns) : factory(factory), nbTurns(nbTurns) {}
+	void operator() (const Troop & troop) { if (troop.arrival <= nbTurns) factory.fight(troop); }
+private:
+	Factory & factory;
+	int nbTurns;
+};
+
+Factory calculateFactoryAt(const Factory & factory, int nbTurnsFromNow, std::vector<std::vector<Troop>> & troopsByFactory)
+{
+	Factory futureFactory(factory);
+	std::vector<Troop> & troops = troopsByFactory[factory.id];
+
+	std::sort(troops.begin(), troops.end(), [](const Troop & troop1, const Troop & troop2) { return troop1.arrival < troop2.arrival; });
+
+	std::for_each(troops.begin(), troops.end(), FightIfArrivedIn(futureFactory, nbTurnsFromNow));
+
+	return futureFactory;
 }
 
 int getDistance(const Factory & factory1, const Factory & factory2)
@@ -189,6 +230,7 @@ int main()
 	// game loop
 	while (1) {
 		std::vector<Factory> factories;
+		std::vector<std::vector<Troop>> troopsByFactory(15);
 
 		int entityCount; // the number of entities (e.g. factories and troops)
 		cin >> entityCount; cin.ignore();
@@ -206,7 +248,8 @@ int main()
 				factories.push_back(Factory(entityId, argToOwner(arg1), arg2, arg3));
 			}
 			else if (entityType == "TROOP") {
-
+				int targetFactoryId = arg3;
+                troopsByFactory[targetFactoryId].push_back(Troop(argToOwner(arg1), arg2, targetFactoryId, arg4, arg5));
 			}
 		}
 
@@ -221,6 +264,9 @@ int main()
 
 
 		string output = "";
+
+		const Factory & futureFacto = calculateFactoryAt(factories[0], 3, troopsByFactory);
+		cerr << futureFacto.id << " in 3: " << futureFacto.cyborgs << " " << futureFacto.owner<< endl;
 
 		vector<Factory> sourceFactories = selectSourceFactory(factories);
 		vector<Factory> targetFactories = selectTargetFactory(factories, isMyTerritoryPair);
