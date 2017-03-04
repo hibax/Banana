@@ -180,13 +180,51 @@ std::string generateActions(std::vector<Factory> factories, std::vector<Troop> t
 	std::string output = "";
 
 	std::vector<Factory> sourceFactories = selectSourceFactory(factories);
+
+	//defense
+
+	for (Factory &myFactory : sourceFactories)
+	{
+		int cyborgsAfterTroopsCalcul = calculateFactoryCyborgsAt(myFactory, 999, troops);
+
+		if (myFactory.production > 0 && cyborgsAfterTroopsCalcul < 0)
+		{
+			for (Factory &factoryHelper : sourceFactories) {
+				if (myFactory.id != factoryHelper.id) {
+					if (factoryHelper.cyborgsRealValueDuringThisTurn > 0) {
+
+
+						int totalSourcesCyborgs = std::accumulate(sourceFactories.begin(), sourceFactories.end(), 0, [](int sum, const Factory & sourceFactory) { return sum + sourceFactory.cyborgsRealValueDuringThisTurn; });
+
+						if (totalSourcesCyborgs > cyborgsAfterTroopsCalcul * (-1)) {
+
+							if (factoryHelper.cyborgs > myFactory.cyborgsRealValueDuringThisTurn) {
+								output += "MOVE " + std::to_string(factoryHelper.id) + " " + std::to_string(myFactory.id) + " " + std::to_string(cyborgsAfterTroopsCalcul*(-1) + 1) + ";";
+								factoryHelper.cyborgsRealValueDuringThisTurn -= cyborgsAfterTroopsCalcul*(-1);
+								myFactory.cyborgsRealValueDuringThisTurn += cyborgsAfterTroopsCalcul*(-1);
+							}
+							else {
+								output += "MOVE " + std::to_string(factoryHelper.id) + " " + std::to_string(myFactory.id) + " " + std::to_string(factoryHelper.cyborgs) + ";";
+								myFactory.cyborgsRealValueDuringThisTurn -= factoryHelper.cyborgsRealValueDuringThisTurn;
+								factoryHelper.cyborgsRealValueDuringThisTurn = 0;
+							}
+
+						}
+
+					}
+				}
+			}
+		}
+	}
+
+
 	std::vector<Factory> targetFactories = selectTargetFactory(factories);
 
-	// To debug: cerr << "Debug messages..." << endl;
+	// attack
 
-	for (Factory target : targetFactories) {
+	for (Factory &target : targetFactories) {
 
-		for (Factory mine : sourceFactories) {
+		for (Factory &mine : sourceFactories) {
 
 			if (mine.cyborgs > 10 && mine.production < 3)
 			{
@@ -212,9 +250,14 @@ std::string generateActions(std::vector<Factory> factories, std::vector<Troop> t
 
 					if (totalSourcesCyborgs > targetCyborgs) {
 
-						if (mine.cyborgs > target.cyborgsRealValueDuringThisTurn) {
+						if (mine.cyborgs > targetCyborgs) {
 							output += "MOVE " + std::to_string(mine.id) + " " + std::to_string(target.id) + " " + std::to_string(targetCyborgs + 1) + ";";
-							target.cyborgsRealValueDuringThisTurn = -1;
+							target.cyborgsRealValueDuringThisTurn -= targetCyborgs + 1;
+
+							std::cerr << "my troops before : " << mine.cyborgsRealValueDuringThisTurn << std::endl;
+							mine.cyborgsRealValueDuringThisTurn -= targetCyborgs + 1;
+
+							std::cerr << "my troops after : " << mine.cyborgsRealValueDuringThisTurn << std::endl;
 						}
 						else {
 							output += "MOVE " + std::to_string(mine.id) + " " + std::to_string(target.id) + " " + std::to_string(mine.cyborgs) + ";";
