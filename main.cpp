@@ -43,6 +43,11 @@ struct Factory
 };
 
 
+struct Troop
+{
+
+};
+
 
 static OWNER argToOwner(int arg) {
 	switch (arg) {
@@ -83,6 +88,10 @@ private:
 	bool pair;
 };
 
+Factory calculateFactoryAt(const Factory & factory, int nbTurnsFromNow, const std::vector<Troop> & troops)
+{
+	return factory;
+}
 
 int getDistance(const Factory & factory1, const Factory & factory2)
 {
@@ -126,7 +135,7 @@ vector<Factory> selectTargetFactory(const std::vector<Factory> & factories, bool
 
 vector<Factory> selectSourceFactory(const std::vector<Factory> & factories) {
 	std::vector<Factory> sourceFactories;
-	std::copy_if(factories.begin(), factories.end(), std::back_inserter(sourceFactories), [](const Factory & factory) { return factory.owner == OWNER::ME; });
+	std::copy_if(factories.begin(), factories.end(), std::back_inserter(sourceFactories), IsOwnedBy(OWNER::ME));
 
 	std::sort(sourceFactories.begin(), sourceFactories.end(), [](const Factory & factory1, const Factory & factory2) {
 		return factory1.cyborgs < factory2.cyborgs; });
