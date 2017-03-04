@@ -5,6 +5,8 @@
 
 using namespace std;
 
+int distances[15][15] = { {0} };
+
 enum OWNER
 {
 	ME, OPPONENT, NEUTRAL
@@ -53,6 +55,16 @@ static OWNER argToOwner(int arg) {
 	}
 }
 
+class IsOwnedBy
+{
+public:
+	IsOwnedBy(OWNER owner) : owner(owner) {}
+	bool operator() (const Factory & factory) const { return factory.owner == owner; }
+private:
+	OWNER owner;
+
+};
+
 class IsOther
 {
 public:
@@ -61,71 +73,52 @@ public:
 
 };
 
-
-class IsNeutral
+class IsMyTerritory
 {
 public:
-	IsNeutral() {}
+	IsMyTerritory(bool pair): pair(pair) {}
 	bool operator() (const Factory & factory) const { return factory.owner == NEUTRAL; }
 
+private:
+	bool pair;
 };
 
 
-int getDistance(Factory  factory1, Factory  factory2, std::vector<Distance> distances)
+int getDistance(const Factory & factory1, const Factory & factory2)
 {
-	for (Distance distance : distances) {
-		if (distance.id1 == factory1.id && distance.id2 == factory2.id || distance.id1 == factory2.id && distance.id2 == factory1.id) {
-			return distance.distance;
-		}
-	}
+	return distances[factory1.id][factory2.id];
 }
 
 
-bool contains(int id, vector<Factory> v)
+bool contains(int id, const std::vector<Factory> & v)
 {
-	std::vector<Factory>::iterator it = std::find_if(v.begin(), v.end(), [&id](const Factory & f) -> bool { return f.id == id; });
-
-	return (it != v.end());
+	return std::any_of(v.begin(), v.end(), [&id](const Factory & f) { return f.id == id; });
 }
 
-int getSumDistance(Factory factory, std::vector<Distance> distances, std::vector<Factory> factories)
+int getSumDistance(const Factory & factory, const std::vector<Factory> & factories)
 {
 	std::vector<Factory> sourceFactories;
-	std::copy_if(factories.begin(), factories.end(), std::back_inserter(sourceFactories), [](const Factory & factory) { return factory.owner == OWNER::ME; });
+	std::copy_if(factories.begin(), factories.end(), std::back_inserter(sourceFactories), IsOwnedBy(OWNER::ME));
 
-	int sum = 0;
-	for (Distance distance : distances) {
-		if (distance.id1 == factory.id && contains(distance.id2, sourceFactories) || distance.id2 == factory.id  && contains(distance.id1, sourceFactories)) {
-
-			sum = sum + distance.distance;
-		}
-	}
-	return sum;
+	return std::accumulate(sourceFactories.begin(), sourceFactories.end(), 0, [&factory] (int sum, const Factory & sourceFactory) { return sum + distances[factory.id][sourceFactory.id]; });
 }
 
-vector<Factory> selectTargetFactory(const std::vector<Factory> & factories, std::vector<Distance> distances, bool iAmPair) {
+vector<Factory> selectTargetFactory(const std::vector<Factory> & factories, bool iAmPair) {
 	std::vector<Factory> neutralFactories;
 	std::copy_if(factories.begin(), factories.end(), std::back_inserter(neutralFactories), IsOther());
 	std::vector<Factory> myNeutralFactories;
 	std::copy_if(neutralFactories.begin(), neutralFactories.end(), std::back_inserter(myNeutralFactories), IsMyTerritory(iAmPair));
 
-	//if (myNeutralFactories.size() != 0) {
-	//    std::sort(myNeutralFactories.begin(), myNeutralFactories.end(), [&distances, &factories](const Factory & factory1, const Factory & factory2) { 
-	//                                                                    return getSumDistance(factory1, distances, factories) > getSumDistance(factory2, distances, factories) ; });
-	//    std::reverse(myNeutralFactories.begin(), myNeutralFactories.end());
-	//    return myNeutralFactories;
-	//}
-	//else 
 	if (neutralFactories.size() != 0) {
 
-		std::sort(neutralFactories.begin(), neutralFactories.end(), [&distances, &factories](const Factory & factory1, const Factory & factory2) {
-			return getSumDistance(factory1, distances, factories) > getSumDistance(factory2, distances, factories); });
-		std::reverse(neutralFactories.begin(), neutralFactories.end());
+		std::sort(neutralFactories.begin(), neutralFactories.end(), [&factories](const Factory & factory1, const Factory & factory2) {
+			return getSumDistance(factory1, factories) <= getSumDistance(factory2, factories); });
+
 		return neutralFactories;
 	}
 	else {
 		std::vector<Factory> centerFactories;
-		std::copy_if(factories.begin(), factories.end(), std::back_inserter(centerFactories), [](Factory f) {return f.id == 0; });
+		std::copy_if(factories.begin(), factories.end(), std::back_inserter(centerFactories), [](const Factory & f) {return f.id == 0; });
 		return centerFactories;
 	}
 
@@ -140,6 +133,10 @@ vector<Factory> selectSourceFactory(const std::vector<Factory> & factories) {
 
 	std::reverse(sourceFactories.begin(), sourceFactories.end());
 	return sourceFactories;
+}
+
+bool isPair(int factoryId) {
+	return false;
 }
 
 /**
@@ -157,16 +154,22 @@ int main()
 	cin.ignore();
 
 
-	std::vector<Distance> distances;
-
 	for (int i = 0; i < linkCount; i++) {
 		int factory1;
 		int factory2;
 		int distance;
 		cin >> factory1 >> factory2 >> distance; cin.ignore();
 
-		distances.push_back({ factory1, factory2, distance });
+		distances[factory1][factory2] = distance;
+        distances[factory2][factory1] = distance;
 
+	}
+
+	for (int i = 0; i < 15; ++i) {
+		for (int j = 0; j < 15; ++j) {
+			cerr << distances[i][j] << " ";
+		}
+		cerr << endl;
 	}
 
 
@@ -211,7 +214,7 @@ int main()
 		string output = "";
 
 		vector<Factory> sourceFactories = selectSourceFactory(factories);
-		vector<Factory> targetFactories = selectTargetFactory(factories, distances, isMyTerritoryPair);
+		vector<Factory> targetFactories = selectTargetFactory(factories, isMyTerritoryPair);
 
 		// To debug: cerr << "Debug messages..." << endl;
 
